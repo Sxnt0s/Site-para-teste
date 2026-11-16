@@ -25,13 +25,16 @@ const DATABASE_PATH = path.resolve(process.env.DATABASE_PATH || path.join(DATA_D
 const PORT = Number(process.env.PORT || 3000);
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const IS_VERCEL = process.env.VERCEL === "1";
-const USE_NEON = Boolean(process.env.DATABASE_URL);
+const DATABASE_URL = process.env.DATABASE_URL || process.env.DATABASE_URL_POSTGRES_URL;
+const USE_NEON = Boolean(DATABASE_URL);
 const PUBLIC_BLOB_TOKEN = process.env.BLOB_PUBLIC_READ_WRITE_TOKEN || "";
 const PRIVATE_BLOB_TOKEN = process.env.BLOB_PRIVATE_READ_WRITE_TOKEN || "";
 const USE_BLOB = IS_VERCEL || Boolean(PUBLIC_BLOB_TOKEN && PRIVATE_BLOB_TOKEN);
 const DISCORD_REDIRECT_URI = process.env.REDIRECT_URI || process.env.DISCORD_REDIRECT_URI;
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
-if (IS_VERCEL && !USE_NEON) throw new Error("Set DATABASE_URL to a Neon PostgreSQL connection string in Vercel.");
+if (IS_VERCEL && !USE_NEON) {
+  throw new Error("Set DATABASE_URL or the Neon integration variable DATABASE_URL_POSTGRES_URL in Vercel.");
+}
 if (IS_VERCEL && (!PUBLIC_BLOB_TOKEN || !PRIVATE_BLOB_TOKEN)) {
   throw new Error("Set separate public and private Vercel Blob read-write tokens in Vercel.");
 }
@@ -227,7 +230,7 @@ async function initializeDatabase() {
   if (databaseInitialization) return databaseInitialization;
   databaseInitialization = (async () => {
     if (USE_NEON) {
-      neonSql = neon(process.env.DATABASE_URL);
+      neonSql = neon(DATABASE_URL);
       for (const statement of postgresSchema) await neonSql.query(statement);
     } else {
       fs.mkdirSync(DATA_DIR, { recursive: true });
