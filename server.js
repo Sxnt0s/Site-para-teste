@@ -1092,14 +1092,14 @@ app.post("/api/orders", orderLimiter, requireCsrf, requireAuth, asyncRoute(async
   if (!Number.isSafeInteger(totalCents)) throw new HttpError(400, "O total do pedido excede o limite permitido.");
   const orderId = crypto.randomUUID();
   const config = await paypalConfig();
-  let paymentUrl;
+  let paymentUrl = "";
   let paypalOrderId = null;
-  const paymentMethod = config.method === "paypal_me" ? "paypal_me" : "paypal";
-  if (paymentMethod === "paypal_me") {
-    if (!config.paypalMeUrl) throw new HttpError(503, "O link PayPal.me ainda não foi configurado pelo fundador.");
+  let paymentMethod = "manual";
+  if (config.method === "paypal_me" && config.paypalMeUrl) {
     const paypalMeUrl = normalizePaypalMeUrl(config.paypalMeUrl);
     paymentUrl = `${paypalMeUrl}/${(totalCents / 100).toFixed(2)}EUR`;
-  } else {
+    paymentMethod = "paypal_me";
+  } else if (config.method === "checkout" && config.clientId && config.clientSecret) {
     const origin = getApplicationOrigin(request);
     const paypalOrder = await paypalApiRequest(config, "/v2/checkout/orders", {
       method: "POST",
@@ -1119,6 +1119,7 @@ app.post("/api/orders", orderLimiter, requireCsrf, requireAuth, asyncRoute(async
     paymentUrl = paypalOrder.links?.find((link) => link.rel === "approve")?.href;
     if (!paypalOrder.id || !paymentUrl) throw new HttpError(502, "O PayPal não devolveu um link de pagamento válido.");
     paypalOrderId = paypalOrder.id;
+    paymentMethod = "paypal";
   }
 
   const timestamp = now();
@@ -1137,7 +1138,9 @@ app.post("/api/orders", orderLimiter, requireCsrf, requireAuth, asyncRoute(async
     order: await serializeOrder(await get("SELECT * FROM orders WHERE id = ?", [orderId])),
     message: paymentMethod === "paypal_me"
       ? "Pedido criado. Paga pelo PayPal.me e aguarda a confirmação da equipa."
-      : "Pedido criado. Continua no PayPal para concluir o pagamento."
+      : paymentMethod === "manual"
+        ? "Pedido criado. Abre um ticket no Discord para concluir o pagamento."
+        : "Pedido criado. Continua no PayPal para concluir o pagamento."
   });
 }));
 
@@ -1371,8 +1374,8 @@ app.patch("/api/admin/orders/:id", requireAdmin, requireCsrf, asyncRoute(async (
   const order = await get("SELECT * FROM orders WHERE id = ?", [request.params.id]);
   if (!order) throw new HttpError(404, "Encomenda não encontrada.");
   if (request.body?.status === "paid") {
-    if (order.payment_method !== "paypal_me") {
-      throw new HttpError(400, "Só podes confirmar manualmente pagamentos recebidos por PayPal.me.");
+    if (!["paypal_me", "manual"].includes(order.payment_method)) {
+      throw new HttpError(400, "Só podes confirmar manualmente pagamentos PayPal.me ou combinados no Discord.");
     }
     if (order.status !== "pending") throw new HttpError(409, "Só podes confirmar encomendas pendentes.");
     const result = await run(

@@ -36,10 +36,13 @@ function renderOrders(orders) {
     if (order.status === "pending") {
       const paymentLink = document.createElement("a");
       paymentLink.className = "account-payment-link";
-      paymentLink.href = order.paymentUrl;
+      const manualOrder = order.paymentMethod === "manual";
+      paymentLink.href = manualOrder ? DISCORD_INVITE : order.paymentUrl;
       paymentLink.target = "_blank";
       paymentLink.rel = "noopener noreferrer";
-      paymentLink.textContent = "Abrir pagamento PayPal";
+      paymentLink.textContent = manualOrder
+        ? "Abrir ticket no Discord para concluir o pagamento"
+        : order.paymentMethod === "paypal_me" ? "Abrir pagamento PayPal.me" : "Abrir pagamento PayPal";
       card.append(paymentLink);
     }
     list.append(card);

@@ -47,7 +47,9 @@ precisam do servidor Express.
 
 No PayPal Checkout, o servidor verifica a captura e valida o valor e a moeda
 antes de marcar a encomenda como paga. No PayPal.me, a encomenda fica pendente
-até um administrador confirmar manualmente o recebimento. A área cliente só
+até um administrador confirmar manualmente o recebimento. Se não houver um
+método PayPal configurado, o pedido é criado na mesma e o cliente recebe um
+link para abrir um ticket no Discord e combinar o pagamento. A área cliente só
 disponibiliza os ficheiros após a confirmação do pagamento.
 
 ## Estrutura

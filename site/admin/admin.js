@@ -279,9 +279,9 @@ function renderOrders(orders) {
     addCell(row, new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(order.totalCents / 100));
     const actions = addActionContainer(row);
     if (order.status === "pending") {
-      if (order.paymentMethod === "paypal_me") {
+      if (["paypal_me", "manual"].includes(order.paymentMethod)) {
         addButton(actions, "Confirmar pagamento", async () => {
-          if (!window.confirm(`Confirmas que recebeste o pagamento PayPal.me da encomenda ${order.id.slice(0, 8)}?`)) return;
+          if (!window.confirm(`Confirmas que recebeste o pagamento da encomenda ${order.id.slice(0, 8)}?`)) return;
           try {
             await window.MonarchAPI.request(`/api/admin/orders/${order.id}`, {
               method: "PATCH",
@@ -295,7 +295,8 @@ function renderOrders(orders) {
         }, "admin-action-primary");
       }
       addButton(actions, "Negar pagamento", async () => {
-        if (!window.confirm(`Negar o pagamento da encomenda ${order.id.slice(0, 8)}?`)) return;
+        const action = order.paymentMethod === "manual" ? "Cancelar a encomenda" : "Negar o pagamento";
+        if (!window.confirm(`${action} ${order.id.slice(0, 8)}?`)) return;
         try {
           await window.MonarchAPI.request(`/api/admin/orders/${order.id}`, {
             method: "PATCH",

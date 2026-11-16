@@ -341,12 +341,21 @@ function initializeCart() {
       cart.clear();
       saveCart();
       renderCart();
+      const manualOrder = result.order.paymentMethod === "manual";
       const manualPaypalMe = result.order.paymentMethod === "paypal_me";
-      setCartMessage(manualPaypalMe
-        ? `Pedido ${result.order.id.slice(0, 8)} criado. Paga pelo PayPal.me e aguarda a confirmação da equipa.`
-        : `Pedido ${result.order.id.slice(0, 8)} criado. Continua para concluir o pagamento.`);
-      checkoutLink.href = result.order.paymentUrl;
-      checkoutLink.textContent = manualPaypalMe ? "Pagar pelo PayPal.me" : "Concluir pagamento";
+      if (manualOrder) {
+        const total = new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" })
+          .format(result.order.totalCents / 100);
+        setCartMessage(`Pedido ${result.order.id.slice(0, 8)} criado (${total}). Para concluir o pagamento, abre um ticket no Discord e indica o número do pedido.`);
+        checkoutLink.href = DISCORD_INVITE;
+        checkoutLink.textContent = "Abrir ticket no Discord";
+      } else {
+        setCartMessage(manualPaypalMe
+          ? `Pedido ${result.order.id.slice(0, 8)} criado. Paga pelo PayPal.me e aguarda a confirmação da equipa.`
+          : `Pedido ${result.order.id.slice(0, 8)} criado. Continua para concluir o pagamento.`);
+        checkoutLink.href = result.order.paymentUrl;
+        checkoutLink.textContent = manualPaypalMe ? "Pagar pelo PayPal.me" : "Concluir pagamento";
+      }
       checkoutLink.hidden = false;
       checkoutLink.focus();
     } catch (error) {
