@@ -276,8 +276,6 @@ function renderProductCard(product) {
 }
 
 function renderProductDetails(product) {
-  const siteName = window.MonarchAPI.currentSettings?.siteName || "Monarch Store";
-  document.title = `${product.name} | ${siteName}`;
   document.querySelectorAll("[data-product-category]").forEach((label) => {
     label.textContent = product.categoryName;
   });
@@ -343,8 +341,12 @@ function initializeCart() {
       cart.clear();
       saveCart();
       renderCart();
-      setCartMessage(`Pedido ${result.order.id.slice(0, 8)} criado. Continua para concluir o pagamento.`);
+      const manualPaypalMe = result.order.paymentMethod === "paypal_me";
+      setCartMessage(manualPaypalMe
+        ? `Pedido ${result.order.id.slice(0, 8)} criado. Paga pelo PayPal.me e aguarda a confirmação da equipa.`
+        : `Pedido ${result.order.id.slice(0, 8)} criado. Continua para concluir o pagamento.`);
       checkoutLink.href = result.order.paymentUrl;
+      checkoutLink.textContent = manualPaypalMe ? "Pagar pelo PayPal.me" : "Concluir pagamento";
       checkoutLink.hidden = false;
       checkoutLink.focus();
     } catch (error) {

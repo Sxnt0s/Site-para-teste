@@ -7,6 +7,10 @@ const accountProductsDialog = document.querySelector("[data-account-products-dia
 const accountProductForm = document.querySelector("[data-account-product-form]");
 const accountProductSelect = document.querySelector("[data-account-product-select]");
 const accountProductAdd = document.querySelector("[data-account-product-add]");
+const accountProductPicker = document.querySelector("[data-account-product-picker]");
+const accountProductPickerTrigger = document.querySelector(".admin-product-picker-trigger");
+const accountProductPickerLabel = document.querySelector("[data-account-product-select-label]");
+const accountProductPickerOptions = document.querySelector(".admin-product-picker-options");
 const accountProductList = document.querySelector("[data-account-products-list]");
 const accountProductEmpty = document.querySelector("[data-account-products-empty]");
 const accountProductStatus = document.querySelector("[data-account-products-status]");
@@ -15,10 +19,18 @@ let currentUser = null;
 let products = [];
 let adminUsers = [];
 let selectedAccountId = null;
+let adminStatusTimer;
 
-function setAdminStatus(message) {
+function setAdminStatus(message, variant = "success") {
+  window.clearTimeout(adminStatusTimer);
   adminStatus.textContent = message;
+  adminStatus.dataset.state = variant;
   adminStatus.hidden = !message;
+  if (message) {
+    adminStatusTimer = window.setTimeout(() => {
+      adminStatus.hidden = true;
+    }, 5000);
+  }
 }
 
 function createAdminTable(container, headings) {
@@ -152,7 +164,7 @@ function renderProducts() {
           await loadProducts();
           setAdminStatus("Produto desativado.");
         } catch (error) {
-          setAdminStatus(error.message);
+          setAdminStatus(error.message, "error");
         }
       }, "admin-action-danger");
     }
@@ -225,7 +237,7 @@ productForm.addEventListener("submit", async (event) => {
     setAdminStatus("Produto guardado.");
   } catch (error) {
     console.error("Não foi possível guardar o produto.", error);
-    setAdminStatus(error.message);
+    setAdminStatus(error.message, "error");
   } finally {
     submit.disabled = false;
   }
@@ -267,6 +279,21 @@ function renderOrders(orders) {
     addCell(row, new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(order.totalCents / 100));
     const actions = addActionContainer(row);
     if (order.status === "pending") {
+      if (order.paymentMethod === "paypal_me") {
+        addButton(actions, "Confirmar pagamento", async () => {
+          if (!window.confirm(`Confirmas que recebeste o pagamento PayPal.me da encomenda ${order.id.slice(0, 8)}?`)) return;
+          try {
+            await window.MonarchAPI.request(`/api/admin/orders/${order.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({ status: "paid" })
+            });
+            await loadOrders();
+            setAdminStatus(`Pagamento da encomenda ${order.id.slice(0, 8)} confirmado.`);
+          } catch (error) {
+            setAdminStatus(error.message, "error");
+          }
+        }, "admin-action-primary");
+      }
       addButton(actions, "Negar pagamento", async () => {
         if (!window.confirm(`Negar o pagamento da encomenda ${order.id.slice(0, 8)}?`)) return;
         try {
@@ -277,7 +304,7 @@ function renderOrders(orders) {
           await loadOrders();
           setAdminStatus(`Encomenda ${order.id.slice(0, 8)} cancelada.`);
         } catch (error) {
-          setAdminStatus(error.message);
+          setAdminStatus(error.message, "error");
         }
       }, "admin-action-danger");
     } else {
@@ -350,7 +377,7 @@ function renderUsers(users) {
             await loadUsers();
             setAdminStatus("Cargo atualizado.");
           } catch (error) {
-            setAdminStatus(error.message);
+            setAdminStatus(error.message, "error");
           }
         });
         actions.append(role);
@@ -364,7 +391,7 @@ function renderUsers(users) {
           await loadUsers();
           setAdminStatus("Estado da conta atualizado.");
         } catch (error) {
-          setAdminStatus(error.message);
+          setAdminStatus(error.message, "error");
         }
       }, user.banned ? "admin-action-primary" : "admin-action-danger");
     }
@@ -397,6 +424,8 @@ function renderUserProductManager(user) {
   placeholder.value = "";
   placeholder.textContent = "Selecionar produto";
   accountProductSelect.replaceChildren(placeholder);
+  accountProductPickerOptions.replaceChildren();
+  accountProductPickerLabel.textContent = "Selecionar produto";
   const alreadyAssigned = new Set(user.accessProducts.map((item) => item.productId));
   const activeProducts = products.filter((item) => item.active);
   const availableProducts = activeProducts.filter((item) => !alreadyAssigned.has(item.id));
@@ -405,8 +434,20 @@ function renderUserProductManager(user) {
     option.value = product.id;
     option.textContent = product.name;
     accountProductSelect.append(option);
+
+    const pickerOption = document.createElement("div");
+    pickerOption.className = "admin-product-picker-option";
+    pickerOption.dataset.productId = product.id;
+    pickerOption.setAttribute("role", "option");
+    pickerOption.setAttribute("aria-selected", "false");
+    pickerOption.tabIndex = -1;
+    pickerOption.textContent = product.name;
+    pickerOption.addEventListener("click", () => selectAccountProduct(product.id));
+    accountProductPickerOptions.append(pickerOption);
   }
   accountProductSelect.disabled = availableProducts.length === 0;
+  accountProductPickerTrigger.disabled = availableProducts.length === 0;
+  setAccountProductPickerOpen(false);
   accountProductAdd.disabled = true;
   accountProductHint.hidden = availableProducts.length > 0;
   accountProductHint.textContent = activeProducts.length
@@ -452,8 +493,65 @@ function renderUserProductManager(user) {
   }
 }
 
-accountProductSelect.addEventListener("change", () => {
-  accountProductAdd.disabled = !accountProductSelect.value;
+function setAccountProductPickerOpen(open) {
+  accountProductPickerTrigger.setAttribute("aria-expanded", String(open));
+  accountProductPickerOptions.hidden = !open;
+}
+
+function selectAccountProduct(productId) {
+  const option = [...accountProductSelect.options].find((item) => item.value === productId);
+  if (!option) return;
+  accountProductSelect.value = productId;
+  accountProductPickerLabel.textContent = option.textContent;
+  for (const pickerOption of accountProductPickerOptions.children) {
+    const selected = pickerOption.dataset.productId === productId;
+    pickerOption.setAttribute("aria-selected", String(selected));
+  }
+  accountProductAdd.disabled = false;
+  setAccountProductPickerOpen(false);
+  accountProductPickerTrigger.focus();
+}
+
+accountProductPickerTrigger.addEventListener("click", () => {
+  setAccountProductPickerOpen(accountProductPickerOptions.hidden);
+  if (!accountProductPickerOptions.hidden) {
+    const selected = accountProductPickerOptions.querySelector('[aria-selected="true"]');
+    (selected || accountProductPickerOptions.firstElementChild)?.focus();
+  }
+});
+
+accountProductPickerTrigger.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  event.preventDefault();
+  setAccountProductPickerOpen(true);
+  const options = [...accountProductPickerOptions.children];
+  (event.key === "ArrowUp" ? options[options.length - 1] : options[0])?.focus();
+});
+
+accountProductPickerOptions.addEventListener("keydown", (event) => {
+  const options = [...accountProductPickerOptions.children];
+  const currentIndex = options.indexOf(event.target);
+  if (event.key === "Escape") {
+    setAccountProductPickerOpen(false);
+    accountProductPickerTrigger.focus();
+    return;
+  }
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    event.target.click();
+    return;
+  }
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  event.preventDefault();
+  const offset = event.key === "ArrowDown" ? 1 : -1;
+  options[(currentIndex + offset + options.length) % options.length]?.focus();
+});
+
+document.addEventListener("click", (event) => {
+  if (!accountProductPicker.contains(event.target)) setAccountProductPickerOpen(false);
+});
+accountProductPicker.addEventListener("focusout", (event) => {
+  if (!accountProductPicker.contains(event.relatedTarget)) setAccountProductPickerOpen(false);
 });
 
 accountProductForm.addEventListener("submit", async (event) => {
@@ -523,16 +621,19 @@ brandingForm.addEventListener("submit", async (event) => {
       siteName: formData.get("siteName").trim(),
       logoUrl: logoUrl || formData.get("logoUrl").trim(),
       faviconUrl: faviconUrl || formData.get("faviconUrl").trim(),
+      paypalMethod: formData.get("paypalMethod"),
       paypalEnvironment: formData.get("paypalEnvironment"),
       paypalClientId: formData.get("paypalClientId").trim(),
       paypalClientSecret: formData.get("paypalClientSecret").trim(),
-      paypalWebhookId: formData.get("paypalWebhookId").trim()
+      paypalMeUrl: formData.get("paypalMeUrl").trim()
     };
     await window.MonarchAPI.request("/api/admin/settings", { method: "PUT", body: JSON.stringify(settings) });
+    document.title = `Admin | ${settings.siteName}`;
     brandingForm.elements.namedItem("paypalClientSecret").value = "";
     brandingForm.elements.namedItem("paypalClientSecret").placeholder = settings.paypalClientId
       ? "Secret armazenado (deixe vazio para manter)"
       : "Introduz para atualizar o secret";
+    updatePaypalSettingsFields();
     for (const kind of ["logo", "favicon"]) {
       const preview = document.querySelector(`[data-brand-preview="${kind}"]`);
       preview.src = settings[`${kind}Url`];
@@ -541,11 +642,21 @@ brandingForm.addEventListener("submit", async (event) => {
     setAdminStatus("Identidade visual e configuração do PayPal atualizadas.");
   } catch (error) {
     console.error("Não foi possível guardar a identidade visual.", error);
-    setAdminStatus(error.message);
+    setAdminStatus(error.message, "error");
   } finally {
     submit.disabled = false;
   }
 });
+
+function updatePaypalSettingsFields() {
+  const checkout = brandingForm.elements.namedItem("paypalMethod").value === "checkout";
+  document.querySelectorAll("[data-paypal-checkout-field]").forEach((field) => {
+    field.hidden = !checkout;
+  });
+  document.querySelector("[data-paypal-me-field]").hidden = checkout;
+}
+
+brandingForm.elements.namedItem("paypalMethod").addEventListener("change", updatePaypalSettingsFields);
 
 document.querySelectorAll("[data-admin-tab]").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -582,7 +693,7 @@ document.querySelector("[data-admin-logout]").addEventListener("click", async ()
     window.location.replace("/");
   } catch (error) {
     console.error("Não foi possível terminar a sessão.", error);
-    setAdminStatus(error.message);
+    setAdminStatus(error.message, "error");
   }
 });
 
@@ -622,13 +733,13 @@ window.MonarchAPI.sessionPromise.then(async (session) => {
     const settings = await window.MonarchAPI.request("/api/admin/settings");
     settings.logoUrl = window.MonarchAPI.normalizeAssetUrl(settings.logoUrl);
     settings.faviconUrl = window.MonarchAPI.normalizeAssetUrl(settings.faviconUrl);
-    for (const key of ["siteName", "logoUrl", "faviconUrl", "paypalEnvironment", "paypalClientId", "paypalWebhookId"]) {
+    for (const key of ["siteName", "logoUrl", "faviconUrl", "paypalMethod", "paypalEnvironment", "paypalClientId", "paypalMeUrl"]) {
       brandingForm.elements.namedItem(key).value = settings[key] || "";
     }
+    updatePaypalSettingsFields();
     brandingForm.elements.namedItem("paypalClientSecret").placeholder = settings.paypalHasSecret
       ? "Secret armazenado (deixe vazio para manter)"
       : "Introduz o Client Secret";
-    document.querySelector("[data-paypal-webhook-url]").textContent = `${window.location.origin}/api/paypal/webhook`;
     for (const kind of ["logo", "favicon"]) {
       const preview = document.querySelector(`[data-brand-preview="${kind}"]`);
       preview.src = settings[`${kind}Url`];
@@ -639,5 +750,5 @@ window.MonarchAPI.sessionPromise.then(async (session) => {
   await loadUsers();
 }).catch((error) => {
   console.error("Não foi possível carregar o painel administrativo.", error);
-  setAdminStatus(error.message);
+  setAdminStatus(error.message, "error");
 });

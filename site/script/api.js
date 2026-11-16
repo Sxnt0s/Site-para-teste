@@ -75,11 +75,12 @@ Promise.all([window.MonarchAPI.sessionPromise, window.MonarchAPI.settingsPromise
       ? "image/jpeg"
       : extension === "webp" ? "image/webp" : "image/png";
   });
-  if (document.title.includes("Monarch Store")) {
-    document.title = document.title.replaceAll("Monarch Store", settings.siteName);
-  }
-  const productTitle = document.querySelector("[data-product-title]");
-  if (productTitle?.textContent) document.title = `${productTitle.textContent} | ${settings.siteName}`;
+  const pathname = window.location.pathname.toLowerCase();
+  document.title = /^\/admin(?:\.html|\/|$)/.test(pathname)
+    ? `Admin | ${settings.siteName}`
+    : /^\/(?:cliente(?:\/|$)|conta\.html$)/.test(pathname)
+      ? `Cliente | ${settings.siteName}`
+      : settings.siteName;
   document.querySelectorAll("[data-auth-label]").forEach((element) => {
     element.textContent = session.user ? "Área cliente" : "Entrar";
   });

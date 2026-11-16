@@ -13796,18 +13796,31 @@ footer a[aria-label="Discord"] ~ a[aria-label="Discord"] {
 }
 
 .admin-status {
-  border: 1px solid rgb(125 167 255 / 25%);
-  border-radius: 10px;
-  background: rgb(37 99 235 / 10%);
-  color: #c8d8ff;
-  padding: 12px 16px;
+  position: fixed;
+  z-index: 1000;
+  top: 22px;
+  right: 24px;
+  width: min(420px, calc(100vw - 32px));
+  border: 1px solid rgb(74 222 128 / 28%);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgb(15 31 30 / 98%), rgb(12 22 32 / 98%));
+  box-shadow: 0 18px 48px rgb(0 0 0 / 38%), inset 0 1px rgb(255 255 255 / 5%);
+  color: #d7f9e3;
+  padding: 15px 18px;
   font-size: 13px;
+  line-height: 1.5;
+  animation: admin-toast-in 180ms ease-out both;
 }
 
-.admin-status.is-error {
-  border-color: rgb(239 68 68 / 30%);
-  background: rgb(239 68 68 / 9%);
+.admin-status[data-state="error"] {
+  border-color: rgb(248 113 113 / 32%);
+  background: linear-gradient(135deg, rgb(45 21 28 / 98%), rgb(24 20 30 / 98%));
   color: #fecaca;
+}
+
+@keyframes admin-toast-in {
+  from { opacity: 0; transform: translateY(-8px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .admin-stats {
@@ -15144,6 +15157,104 @@ footer a[aria-label="Discord"] ~ a[aria-label="Discord"] {
   gap: 10px;
 }
 
+.admin-product-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.admin-product-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #344158;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #121d2e, #0e1624);
+  color: #e7edf7;
+  padding: 10px 13px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.admin-product-picker-trigger:hover,
+.admin-product-picker-trigger[aria-expanded="true"] {
+  border-color: #718ff2;
+  background: #121d30;
+}
+
+.admin-product-picker-trigger:focus-visible {
+  outline: none;
+  border-color: #8ea8ff;
+  box-shadow: 0 0 0 3px rgb(91 124 250 / 22%);
+}
+
+.admin-product-picker-trigger:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.admin-product-picker-trigger svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: #9cadc5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  transition: transform 150ms ease;
+}
+
+.admin-product-picker-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.admin-product-picker-options {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 7px);
+  right: 0;
+  left: 0;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid #344158;
+  border-radius: 10px;
+  background: #101a2a;
+  box-shadow: 0 16px 36px rgb(0 0 0 / 42%);
+  padding: 5px;
+}
+
+.admin-product-picker-options[hidden] {
+  display: none !important;
+}
+
+.admin-product-picker-option {
+  border-radius: 7px;
+  color: #dce5f2;
+  padding: 10px 11px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.admin-product-picker-option:hover,
+.admin-product-picker-option:focus,
+.admin-product-picker-option[aria-selected="true"] {
+  background: rgb(91 124 250 / 17%);
+  color: #fff;
+}
+
+.admin-product-picker-option[aria-selected="true"]::after {
+  content: "Selecionado";
+  float: right;
+  color: #a9bcff;
+  font-size: 11px;
+}
+
 .admin-account-product-controls .admin-role-select {
   min-width: 0;
   min-height: 44px;
@@ -15159,6 +15270,18 @@ footer a[aria-label="Discord"] ~ a[aria-label="Discord"] {
 .admin-account-product-controls .admin-role-select option {
   background: #0e1624;
   color: #e7edf7;
+}
+
+.admin-form-grid > [data-paypal-checkout-field][hidden],
+.admin-form-grid > [data-paypal-me-field][hidden] {
+  display: none !important;
+}
+
+.admin-field-hint {
+  color: #91a0b5;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .admin-account-product-controls .store-button {
@@ -15242,6 +15365,12 @@ footer a[aria-label="Discord"] ~ a[aria-label="Discord"] {
 }
 
 @media (max-width: 560px) {
+  .admin-status {
+    top: 12px;
+    right: 12px;
+    width: calc(100vw - 24px);
+  }
+
   .admin-account-products-dialog {
     width: calc(100% - 24px);
     max-height: calc(100vh - 24px);
@@ -15311,4 +15440,20 @@ footer a[aria-label="Discord"] ~ a[aria-label="Discord"] {
   .admin-account-products-dialog[open] {
     animation: none;
   }
+
+  .admin-status {
+    animation: none;
+  }
+}
+
+.admin-status {
+  border-color: rgb(74 222 128 / 28%);
+  background: linear-gradient(135deg, rgb(15 31 30 / 98%), rgb(12 22 32 / 98%));
+  color: #d7f9e3;
+}
+
+.admin-status[data-state="error"] {
+  border-color: rgb(248 113 113 / 32%);
+  background: linear-gradient(135deg, rgb(45 21 28 / 98%), rgb(24 20 30 / 98%));
+  color: #fecaca;
 }

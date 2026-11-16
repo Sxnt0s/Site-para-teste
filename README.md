@@ -38,18 +38,17 @@ precisam do servidor Express.
 4. Publica o projeto. `vercel.json` encaminha as páginas e a API para a função
    Express; os produtos de exemplo são inseridos automaticamente na base Neon
    vazia. Os dados SQLite e contas de teste locais não são importados.
-5. Inicia sessão como fundador e configura o PayPal em
-   **Administração → Configurações**. Define o ambiente (Sandbox ou Live), o
-   Client ID, o Client Secret e o ID do webhook. O Client Secret é encriptado
-   na base de dados com uma chave derivada de `SESSION_SECRET`; não é enviado
-   de volta ao navegador.
-6. No painel PayPal, regista `https://<dominio>/api/paypal/webhook` e subscreve
-   o evento `PAYMENT.CAPTURE.COMPLETED`.
+5. Inicia sessão como fundador e abre **Administração → Configurações**.
+   Escolhe **PayPal Checkout** e indica o ambiente (Sandbox ou Live), Client ID
+   e Client Secret, ou escolhe **PayPal.me** e indica o link do perfil.
+   O valor é acrescentado ao link automaticamente. O Client Secret é
+   encriptado na base de dados com uma chave derivada de `SESSION_SECRET` e
+   não é enviado de volta ao navegador.
 
-O servidor cria a encomenda PayPal, verifica a captura e valida valor e moeda.
-O retorno do navegador não concede acesso por si só; a captura PayPal ou um
-webhook com assinatura verificada é que marca a encomenda como paga. A área
-cliente só disponibiliza os ficheiros após essa confirmação.
+No PayPal Checkout, o servidor verifica a captura e valida o valor e a moeda
+antes de marcar a encomenda como paga. No PayPal.me, a encomenda fica pendente
+até um administrador confirmar manualmente o recebimento. A área cliente só
+disponibiliza os ficheiros após a confirmação do pagamento.
 
 ## Estrutura
 

@@ -269,6 +269,7 @@ async function initializeDatabase() {
     await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["siteName", "Monarch Store"]);
     await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["logoUrl", "/assets/imgs/logomonarch.png"]);
     await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["faviconUrl", "/assets/imgs/favicon-monarch.png"]);
+    await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["paypalMethod", "checkout"]);
     await run("UPDATE products SET image = replace(image, '/uploads/', '/assets/imgs/uploads/') WHERE image LIKE '/uploads/%'");
     await run("UPDATE settings SET value = replace(value, '/uploads/', '/assets/imgs/uploads/') WHERE key IN ('logoUrl', 'faviconUrl') AND value LIKE '/uploads/%'");
   })();
@@ -585,18 +586,44 @@ function decryptSecret(value) {
 }
 
 async function paypalConfig() {
-  const [environment, clientId, clientSecret, webhookId] = await Promise.all([
+  const [method, environment, clientId, clientSecret, webhookId, paypalMeUrl] = await Promise.all([
+    setting("paypalMethod"),
     setting("paypalEnvironment"),
     setting("paypalClientId"),
     setting("paypalClientSecret"),
-    setting("paypalWebhookId")
+    setting("paypalWebhookId"),
+    setting("paypalMeUrl")
   ]);
   return {
+    method: method === "paypal_me" ? "paypal_me" : "checkout",
     environment: environment === "live" ? "live" : "sandbox",
     clientId,
     clientSecret: clientSecret ? decryptSecret(clientSecret) : null,
-    webhookId
+    webhookId,
+    paypalMeUrl
   };
+}
+
+function normalizePaypalMeUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new HttpError(400, "Indica um link PayPal.me válido, por exemplo https://paypal.me/nomedaconta.");
+  }
+  const username = url.pathname.replace(/^\/|\/$/g, "");
+  if (
+    url.protocol !== "https:" ||
+    !["paypal.me", "www.paypal.me"].includes(url.hostname.toLowerCase()) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !/^[A-Za-z0-9._-]+$/.test(username)
+  ) {
+    throw new HttpError(400, "Indica apenas o link HTTPS do perfil PayPal.me, sem valor ou parâmetros.");
+  }
+  return `https://paypal.me/${username}`;
 }
 
 function paypalApiBase(environment) {
@@ -1064,32 +1091,42 @@ app.post("/api/orders", orderLimiter, requireCsrf, requireAuth, asyncRoute(async
   const totalCents = orderItems.reduce((sum, item) => sum + item.product.price_cents * item.quantity, 0);
   if (!Number.isSafeInteger(totalCents)) throw new HttpError(400, "O total do pedido excede o limite permitido.");
   const orderId = crypto.randomUUID();
-  const origin = getApplicationOrigin(request);
   const config = await paypalConfig();
-  const paypalOrder = await paypalApiRequest(config, "/v2/checkout/orders", {
-    method: "POST",
-    body: JSON.stringify({
-      intent: "CAPTURE",
-      purchase_units: [{
-        reference_id: orderId,
-        custom_id: orderId,
-        amount: { currency_code: "EUR", value: (totalCents / 100).toFixed(2) }
-      }],
-      application_context: {
-        return_url: `${origin}/api/paypal/return?order=${encodeURIComponent(orderId)}`,
-        cancel_url: `${origin}/api/paypal/cancel?order=${encodeURIComponent(orderId)}`
-      }
-    })
-  });
-  const approvalUrl = paypalOrder.links?.find((link) => link.rel === "approve")?.href;
-  if (!paypalOrder.id || !approvalUrl) throw new HttpError(502, "O PayPal não devolveu um link de pagamento válido.");
+  let paymentUrl;
+  let paypalOrderId = null;
+  const paymentMethod = config.method === "paypal_me" ? "paypal_me" : "paypal";
+  if (paymentMethod === "paypal_me") {
+    if (!config.paypalMeUrl) throw new HttpError(503, "O link PayPal.me ainda não foi configurado pelo fundador.");
+    const paypalMeUrl = normalizePaypalMeUrl(config.paypalMeUrl);
+    paymentUrl = `${paypalMeUrl}/${(totalCents / 100).toFixed(2)}EUR`;
+  } else {
+    const origin = getApplicationOrigin(request);
+    const paypalOrder = await paypalApiRequest(config, "/v2/checkout/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        intent: "CAPTURE",
+        purchase_units: [{
+          reference_id: orderId,
+          custom_id: orderId,
+          amount: { currency_code: "EUR", value: (totalCents / 100).toFixed(2) }
+        }],
+        application_context: {
+          return_url: `${origin}/api/paypal/return?order=${encodeURIComponent(orderId)}`,
+          cancel_url: `${origin}/api/paypal/cancel?order=${encodeURIComponent(orderId)}`
+        }
+      })
+    });
+    paymentUrl = paypalOrder.links?.find((link) => link.rel === "approve")?.href;
+    if (!paypalOrder.id || !paymentUrl) throw new HttpError(502, "O PayPal não devolveu um link de pagamento válido.");
+    paypalOrderId = paypalOrder.id;
+  }
 
   const timestamp = now();
   const orderQueries = [{
     text: `INSERT INTO orders (
       id, user_id, status, payment_method, payment_url, paypal_order_id, total_cents, created_at, updated_at
-    ) VALUES (?, ?, 'pending', 'paypal', ?, ?, ?, ?, ?)`,
-    params: [orderId, request.user.id, approvalUrl, paypalOrder.id, totalCents, timestamp, timestamp]
+    ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+    params: [orderId, request.user.id, paymentMethod, paymentUrl, paypalOrderId, totalCents, timestamp, timestamp]
   }, ...orderItems.map(({ product, quantity }) => ({
     text: `INSERT INTO order_items (order_id, product_id, product_name, product_image, quantity, unit_price_cents)
       VALUES (?, ?, ?, ?, ?, ?)`,
@@ -1098,7 +1135,9 @@ app.post("/api/orders", orderLimiter, requireCsrf, requireAuth, asyncRoute(async
   await runTransaction(orderQueries);
   response.status(201).json({
     order: await serializeOrder(await get("SELECT * FROM orders WHERE id = ?", [orderId])),
-    message: "Pedido criado. Continua no PayPal para concluir o pagamento."
+    message: paymentMethod === "paypal_me"
+      ? "Pedido criado. Paga pelo PayPal.me e aguarda a confirmação da equipa."
+      : "Pedido criado. Continua no PayPal para concluir o pagamento."
   });
 }));
 
@@ -1106,6 +1145,9 @@ app.get("/api/paypal/return", requireAuth, asyncRoute(async (request, response) 
   const orderId = typeof request.query.order === "string" ? request.query.order : "";
   const order = await get("SELECT * FROM orders WHERE id = ? AND user_id = ?", [orderId, request.user.id]);
   if (!order) throw new HttpError(404, "Encomenda não encontrada.");
+  if (order.payment_method !== "paypal" || !order.paypal_order_id) {
+    throw new HttpError(400, "Esta encomenda requer confirmação manual da equipa.");
+  }
   if (order.status === "pending") {
     const config = await paypalConfig();
     const capture = await paypalApiRequest(config, `/v2/checkout/orders/${encodeURIComponent(order.paypal_order_id)}/capture`, {
@@ -1326,9 +1368,21 @@ app.get("/api/admin/orders", requireAdmin, asyncRoute(async (request, response) 
 }));
 
 app.patch("/api/admin/orders/:id", requireAdmin, requireCsrf, asyncRoute(async (request, response) => {
-  if (request.body?.status !== "cancelled") throw new HttpError(400, "Só podes cancelar uma encomenda pendente.");
   const order = await get("SELECT * FROM orders WHERE id = ?", [request.params.id]);
   if (!order) throw new HttpError(404, "Encomenda não encontrada.");
+  if (request.body?.status === "paid") {
+    if (order.payment_method !== "paypal_me") {
+      throw new HttpError(400, "Só podes confirmar manualmente pagamentos recebidos por PayPal.me.");
+    }
+    if (order.status !== "pending") throw new HttpError(409, "Só podes confirmar encomendas pendentes.");
+    const result = await run(
+      "UPDATE orders SET status = 'paid', updated_at = ? WHERE id = ? AND status = 'pending'",
+      [now(), order.id]
+    );
+    if (result.changes !== 1) throw new HttpError(409, "A encomenda já foi atualizada.");
+    return response.json(await serializeOrder(await get("SELECT * FROM orders WHERE id = ?", [order.id])));
+  }
+  if (request.body?.status !== "cancelled") throw new HttpError(400, "Só podes confirmar PayPal.me ou cancelar uma encomenda pendente.");
   if (order.status !== "pending") throw new HttpError(409, "Só podes cancelar encomendas pendentes.");
   await run("UPDATE orders SET status = 'cancelled', updated_at = ? WHERE id = ? AND status = 'pending'", [now(), order.id]);
   response.json(await serializeOrder(await get("SELECT * FROM orders WHERE id = ?", [order.id])));
@@ -1393,9 +1447,10 @@ app.get("/api/admin/settings", requireSuperAdmin, asyncRoute(async (request, res
   const [settings, config] = await Promise.all([publicSettings(), paypalConfig()]);
   response.json({
     ...settings,
+    paypalMethod: config.method,
     paypalEnvironment: config.environment,
     paypalClientId: config.clientId || "",
-    paypalWebhookId: config.webhookId || "",
+    paypalMeUrl: config.paypalMeUrl || "",
     paypalHasSecret: Boolean(config.clientSecret)
   });
 }));
@@ -1403,7 +1458,7 @@ app.get("/api/admin/settings", requireSuperAdmin, asyncRoute(async (request, res
 app.put("/api/admin/settings", requireSuperAdmin, requireCsrf, asyncRoute(async (request, response) => {
   const {
     siteName, logoUrl, faviconUrl,
-    paypalEnvironment, paypalClientId, paypalClientSecret, paypalWebhookId
+    paypalMethod, paypalEnvironment, paypalClientId, paypalClientSecret, paypalMeUrl
   } = request.body || {};
   if (typeof siteName !== "string" || siteName.trim().length < 2 || siteName.trim().length > 60) {
     throw new HttpError(400, "O nome do site deve ter entre 2 e 60 caracteres.");
@@ -1411,32 +1466,39 @@ app.put("/api/admin/settings", requireSuperAdmin, requireCsrf, asyncRoute(async 
   if (!isValidAssetPath(logoUrl) || !isValidAssetPath(faviconUrl)) {
     throw new HttpError(400, "A logo e o favicon devem apontar para uma imagem carregada no site.");
   }
+  if (!["checkout", "paypal_me"].includes(paypalMethod)) {
+    throw new HttpError(400, "Escolhe PayPal Checkout ou PayPal.me.");
+  }
   if (!["sandbox", "live"].includes(paypalEnvironment)) {
     throw new HttpError(400, "Escolhe o ambiente Sandbox ou Live do PayPal.");
   }
   if (typeof paypalClientId !== "string" || paypalClientId.length > 256 ||
-      typeof paypalWebhookId !== "string" || paypalWebhookId.length > 128 ||
-      typeof paypalClientSecret !== "string" || paypalClientSecret.length > 512) {
+      typeof paypalClientSecret !== "string" || paypalClientSecret.length > 512 ||
+      typeof paypalMeUrl !== "string" || paypalMeUrl.length > 500) {
     throw new HttpError(400, "A configuração do PayPal contém um campo inválido.");
   }
+  const normalizedPaypalMeUrl = paypalMeUrl.trim() ? normalizePaypalMeUrl(paypalMeUrl.trim()) : "";
+  const storedClientId = await setting("paypalClientId");
   const existingSecret = await setting("paypalClientSecret");
-  const clientId = paypalClientId.trim();
-  const webhookId = paypalWebhookId.trim();
+  const clientId = paypalClientId.trim() || storedClientId || "";
   const secret = paypalClientSecret.trim();
-  if (clientId && (!webhookId || (!secret && !existingSecret))) {
-    throw new HttpError(400, "Para ativar o PayPal, indica o Client ID, o Client Secret e o ID do webhook.");
+  if (paypalMethod === "checkout" && (!clientId || (!secret && !existingSecret))) {
+    throw new HttpError(400, "Para usar PayPal Checkout, indica o Client ID e o Client Secret.");
+  }
+  if (paypalMethod === "paypal_me" && !normalizedPaypalMeUrl) {
+    throw new HttpError(400, "Indica o link do perfil PayPal.me.");
   }
   const settings = [
     ["siteName", siteName.trim()],
     ["logoUrl", logoUrl],
     ["faviconUrl", faviconUrl],
+    ["paypalMethod", paypalMethod],
+    ["paypalMeUrl", normalizedPaypalMeUrl],
     ["paypalEnvironment", paypalEnvironment]
   ];
   if (clientId) {
-    settings.push(["paypalClientId", clientId], ["paypalWebhookId", webhookId]);
+    settings.push(["paypalClientId", clientId]);
     if (secret) settings.push(["paypalClientSecret", encryptSecret(secret)]);
-  } else {
-    settings.push(["paypalClientId", ""], ["paypalWebhookId", ""], ["paypalClientSecret", ""]);
   }
   await runTransaction(settings.map(([key, value]) => ({
     text: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1445,9 +1507,10 @@ app.put("/api/admin/settings", requireSuperAdmin, requireCsrf, asyncRoute(async 
   const [branding, config] = await Promise.all([publicSettings(), paypalConfig()]);
   response.json({
     ...branding,
+    paypalMethod: config.method,
     paypalEnvironment: config.environment,
     paypalClientId: config.clientId || "",
-    paypalWebhookId: config.webhookId || "",
+    paypalMeUrl: config.paypalMeUrl || "",
     paypalHasSecret: Boolean(config.clientSecret)
   });
 }));

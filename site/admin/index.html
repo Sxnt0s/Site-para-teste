@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#111a2e">
     <meta name="description" content="Gere os produtos e as contas da Monarch Store.">
-    <title>Painel de administração | Monarch Store</title>
+    <title>Admin | Monarch Store</title>
     <link rel="icon" type="image/png" href="/assets/imgs/favicon-monarch.png">
     <link rel="preload" href="/assets/fonts/Geist-Latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/style.css?v=4">
@@ -71,7 +71,7 @@
           </section>
 
           <div class="admin-content" data-admin-content hidden>
-            <div class="admin-status" data-admin-status role="status" aria-live="polite" hidden></div>
+            <div class="admin-status" data-admin-status role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
             <section class="admin-panel" id="admin-panel-products" role="tabpanel" aria-labelledby="admin-tab-products" data-admin-panel="products">
               <div class="admin-panel-heading">
@@ -140,7 +140,7 @@
 
             <section class="admin-panel" id="admin-panel-orders" role="tabpanel" aria-labelledby="admin-tab-orders" data-admin-panel="orders" hidden>
               <div class="admin-panel-heading">
-                <div><span class="admin-panel-kicker">VENDAS</span><h2>Encomendas</h2><p>Acompanha os pagamentos confirmados pelo PayPal e cancela encomendas pendentes.</p></div>
+                <div><span class="admin-panel-kicker">VENDAS</span><h2>Encomendas</h2><p>Acompanha pagamentos, confirma manualmente transferências PayPal.me e cancela encomendas pendentes.</p></div>
               </div>
               <div class="admin-list" data-admin-orders></div>
               <div class="admin-empty" data-admin-orders-empty hidden>
@@ -152,7 +152,7 @@
 
             <section class="admin-panel" id="admin-panel-settings" role="tabpanel" aria-labelledby="admin-tab-settings" data-admin-panel="settings" hidden>
               <div class="admin-panel-heading">
-                <div><span class="admin-panel-kicker">PERSONALIZAÇÃO</span><h2>Configurações</h2><p>Gere a identidade visual e as credenciais do checkout PayPal.</p></div>
+                <div><span class="admin-panel-kicker">PERSONALIZAÇÃO</span><h2>Configurações</h2><p>Gere a identidade visual e escolhe a forma de pagamento.</p></div>
               </div>
               <div class="admin-settings-restricted" data-admin-settings-restricted hidden>
                 <strong>Acesso restrito</strong>
@@ -174,18 +174,27 @@
                     <input name="faviconFile" type="file" accept="image/png,image/jpeg,image/webp">
                   </label>
                   <div class="admin-form-wide">
-                    <span class="admin-panel-kicker">PAYPAL CHECKOUT</span>
-                    <p>As credenciais ficam guardadas no servidor e o Client Secret é encriptado. O endpoint para configurar no PayPal é <code data-paypal-webhook-url></code>.</p>
+                    <span class="admin-panel-kicker">PAGAMENTOS</span>
+                    <p>Escolhe PayPal Checkout ou PayPal.me. As encomendas PayPal.me ficam pendentes até um administrador confirmar o recebimento.</p>
                   </div>
-                  <label>Ambiente PayPal
+                  <label class="admin-form-wide">Método de pagamento
+                    <select class="admin-role-select" name="paypalMethod">
+                      <option value="checkout">PayPal Checkout</option>
+                      <option value="paypal_me">PayPal.me</option>
+                    </select>
+                  </label>
+                  <label data-paypal-checkout-field>Ambiente PayPal
                     <select class="admin-role-select" name="paypalEnvironment">
                       <option value="sandbox">Sandbox (testes)</option>
                       <option value="live">Live (pagamentos reais)</option>
                     </select>
                   </label>
-                  <label>Client ID<input name="paypalClientId" type="text" maxlength="256" autocomplete="off"></label>
-                  <label>Client Secret<input name="paypalClientSecret" type="password" maxlength="512" autocomplete="new-password" placeholder="Introduz para atualizar o secret"></label>
-                  <label>ID do webhook<input name="paypalWebhookId" type="text" maxlength="128" autocomplete="off"></label>
+                  <label data-paypal-checkout-field>Client ID<input name="paypalClientId" type="text" maxlength="256" autocomplete="off"></label>
+                  <label data-paypal-checkout-field>Client Secret<input name="paypalClientSecret" type="password" maxlength="512" autocomplete="new-password" placeholder="Introduz para atualizar o secret"></label>
+                  <label class="admin-form-wide" data-paypal-me-field hidden>Link PayPal.me
+                    <input name="paypalMeUrl" type="text" maxlength="500" autocomplete="url" placeholder="https://paypal.me/nomedaconta">
+                    <span class="admin-field-hint">O valor do pedido é acrescentado automaticamente. O pagamento é confirmado manualmente.</span>
+                  </label>
                 </div>
                 <div class="admin-form-footer">
                   <span class="admin-inline-status" data-brand-status aria-live="polite"></span>
@@ -208,11 +217,33 @@
       </header>
       <div class="admin-account-dialog-content">
         <form class="admin-account-product-form" data-account-product-form>
-          <label for="admin-account-product-select">Adicionar produto</label>
+          <label id="admin-account-product-select-label" for="admin-account-product-select-trigger">Adicionar produto</label>
           <div class="admin-account-product-controls">
-            <select class="admin-role-select" id="admin-account-product-select" data-account-product-select>
-              <option value="">Selecionar produto</option>
-            </select>
+            <div class="admin-product-picker" data-account-product-picker>
+              <button
+                class="admin-product-picker-trigger"
+                id="admin-account-product-select-trigger"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-controls="admin-account-product-options"
+                aria-labelledby="admin-account-product-select-label admin-account-product-select-value"
+                disabled
+              >
+                <span class="admin-product-picker-label" id="admin-account-product-select-value" data-account-product-select-label>Selecionar produto</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"></path></svg>
+              </button>
+              <div
+                class="admin-product-picker-options"
+                id="admin-account-product-options"
+                role="listbox"
+                aria-labelledby="admin-account-product-select-label"
+                hidden
+              ></div>
+              <select id="admin-account-product-select" data-account-product-select hidden tabindex="-1" aria-hidden="true">
+                <option value="">Selecionar produto</option>
+              </select>
+            </div>
             <button class="store-button admin-action-primary" type="submit" data-account-product-add disabled>Adicionar</button>
           </div>
           <p data-account-product-hint hidden></p>
@@ -222,8 +253,8 @@
         <p class="admin-account-products-status" data-account-products-status role="status" aria-live="polite" hidden></p>
       </div>
     </dialog>
-    <script src="/script/api.js?v=3"></script>
+    <script src="/script/api.js?v=4"></script>
     <script src="/script/navigation.js"></script>
-    <script src="/admin/admin.js?v=2"></script>
+    <script src="/admin/admin.js?v=3"></script>
   </body>
 </html>
