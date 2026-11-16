@@ -269,7 +269,7 @@ async function initializeDatabase() {
     await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["siteName", "Monarch Store"]);
     await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["logoUrl", "/assets/imgs/logomonarch.png"]);
     await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["faviconUrl", "/assets/imgs/favicon-monarch.png"]);
-    await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["paypalMethod", "checkout"]);
+    await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", ["paypalMethod", "manual"]);
     await run("UPDATE products SET image = replace(image, '/uploads/', '/assets/imgs/uploads/') WHERE image LIKE '/uploads/%'");
     await run("UPDATE settings SET value = replace(value, '/uploads/', '/assets/imgs/uploads/') WHERE key IN ('logoUrl', 'faviconUrl') AND value LIKE '/uploads/%'");
   })();
@@ -595,7 +595,13 @@ async function paypalConfig() {
     setting("paypalMeUrl")
   ]);
   return {
-    method: method === "paypal_me" ? "paypal_me" : "checkout",
+    method: method === "manual"
+      ? "manual"
+      : method === "paypal_me" && paypalMeUrl
+        ? "paypal_me"
+        : method === "checkout" && clientId && clientSecret
+          ? "checkout"
+          : "manual",
     environment: environment === "live" ? "live" : "sandbox",
     clientId,
     clientSecret: clientSecret ? decryptSecret(clientSecret) : null,
@@ -1111,6 +1117,7 @@ app.post("/api/orders", orderLimiter, requireCsrf, requireAuth, asyncRoute(async
           amount: { currency_code: "EUR", value: (totalCents / 100).toFixed(2) }
         }],
         application_context: {
+          user_action: "PAY_NOW",
           return_url: `${origin}/api/paypal/return?order=${encodeURIComponent(orderId)}`,
           cancel_url: `${origin}/api/paypal/cancel?order=${encodeURIComponent(orderId)}`
         }
@@ -1469,8 +1476,8 @@ app.put("/api/admin/settings", requireSuperAdmin, requireCsrf, asyncRoute(async 
   if (!isValidAssetPath(logoUrl) || !isValidAssetPath(faviconUrl)) {
     throw new HttpError(400, "A logo e o favicon devem apontar para uma imagem carregada no site.");
   }
-  if (!["checkout", "paypal_me"].includes(paypalMethod)) {
-    throw new HttpError(400, "Escolhe PayPal Checkout ou PayPal.me.");
+  if (!["checkout", "paypal_me", "manual"].includes(paypalMethod)) {
+    throw new HttpError(400, "Escolhe PayPal Checkout, PayPal.me ou pagamento manual.");
   }
   if (!["sandbox", "live"].includes(paypalEnvironment)) {
     throw new HttpError(400, "Escolhe o ambiente Sandbox ou Live do PayPal.");
@@ -1480,7 +1487,9 @@ app.put("/api/admin/settings", requireSuperAdmin, requireCsrf, asyncRoute(async 
       typeof paypalMeUrl !== "string" || paypalMeUrl.length > 500) {
     throw new HttpError(400, "A configuração do PayPal contém um campo inválido.");
   }
-  const normalizedPaypalMeUrl = paypalMeUrl.trim() ? normalizePaypalMeUrl(paypalMeUrl.trim()) : "";
+  const normalizedPaypalMeUrl = paypalMethod === "paypal_me" && paypalMeUrl.trim()
+    ? normalizePaypalMeUrl(paypalMeUrl.trim())
+    : "";
   const storedClientId = await setting("paypalClientId");
   const existingSecret = await setting("paypalClientSecret");
   const clientId = paypalClientId.trim() || storedClientId || "";
@@ -1496,13 +1505,13 @@ app.put("/api/admin/settings", requireSuperAdmin, requireCsrf, asyncRoute(async 
     ["logoUrl", logoUrl],
     ["faviconUrl", faviconUrl],
     ["paypalMethod", paypalMethod],
-    ["paypalMeUrl", normalizedPaypalMeUrl],
     ["paypalEnvironment", paypalEnvironment]
   ];
-  if (clientId) {
+  if (paypalMethod === "checkout" && clientId) {
     settings.push(["paypalClientId", clientId]);
     if (secret) settings.push(["paypalClientSecret", encryptSecret(secret)]);
   }
+  if (paypalMethod === "paypal_me") settings.push(["paypalMeUrl", normalizedPaypalMeUrl]);
   await runTransaction(settings.map(([key, value]) => ({
     text: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     params: [key, value]
@@ -1520,7 +1529,17 @@ app.put("/api/admin/settings", requireSuperAdmin, requireCsrf, asyncRoute(async 
 
 app.get("/uploads", (request, response) => response.status(404).end());
 app.use("/uploads", express.static(UPLOADS_DIR, { dotfiles: "deny", index: false, fallthrough: false, maxAge: "1d" }));
-app.use("/assets", express.static(ASSETS_DIR, { dotfiles: "deny", index: false, fallthrough: false, maxAge: "1d" }));
+app.use("/assets", express.static(ASSETS_DIR, {
+  dotfiles: "deny",
+  index: false,
+  fallthrough: false,
+  maxAge: "1d",
+  setHeaders(response, filePath) {
+    if (path.resolve(filePath) === path.join(ASSETS_DIR, "imgs", "hero-graffiti-wall-cpx-v36.png")) {
+      response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    }
+  }
+}));
 app.use("/imgs", express.static(path.join(ASSETS_DIR, "imgs"), { dotfiles: "deny", index: false, fallthrough: false, maxAge: "1d" }));
 app.use("/fonts", express.static(path.join(ASSETS_DIR, "fonts"), { dotfiles: "deny", index: false, fallthrough: false, maxAge: "1d" }));
 app.use("/script", express.static(path.join(SITE_DIR, "script"), { dotfiles: "deny", index: false, fallthrough: false, maxAge: "0" }));

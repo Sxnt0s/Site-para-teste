@@ -39,18 +39,20 @@ precisam do servidor Express.
    Express; os produtos de exemplo são inseridos automaticamente na base Neon
    vazia. Os dados SQLite e contas de teste locais não são importados.
 5. Inicia sessão como fundador e abre **Administração → Configurações**.
-   Escolhe **PayPal Checkout** e indica o ambiente (Sandbox ou Live), Client ID
-   e Client Secret, ou escolhe **PayPal.me** e indica o link do perfil.
-   O valor é acrescentado ao link automaticamente. O Client Secret é
-   encriptado na base de dados com uma chave derivada de `SESSION_SECRET` e
+   Escolhe **Sem PayPal** para guardar a identidade visual sem configurar
+   pagamentos; escolhe **PayPal Checkout** e indica o ambiente (Sandbox ou
+   Live), Client ID e Client Secret, ou escolhe **PayPal.me** e indica o link
+   do perfil. O valor é acrescentado ao link automaticamente. O Client Secret
+   é encriptado na base de dados com uma chave derivada de `SESSION_SECRET` e
    não é enviado de volta ao navegador.
 
-No PayPal Checkout, o servidor verifica a captura e valida o valor e a moeda
-antes de marcar a encomenda como paga. No PayPal.me, a encomenda fica pendente
-até um administrador confirmar manualmente o recebimento. Se não houver um
-método PayPal configurado, o pedido é criado na mesma e o cliente recebe um
-link para abrir um ticket no Discord e combinar o pagamento. A área cliente só
-disponibiliza os ficheiros após a confirmação do pagamento.
+No PayPal Checkout, depois de o cliente aprovar o pagamento, o servidor
+captura-o automaticamente e valida o valor e a moeda antes de marcar a
+encomenda como paga; o fundador não precisa de aceitar a transação. No
+PayPal.me, a encomenda fica pendente até um administrador confirmar
+manualmente o recebimento. Sem PayPal, o pedido é criado na mesma e o cliente
+recebe um link para abrir um ticket no Discord e combinar o pagamento. A área
+cliente só disponibiliza os ficheiros após a confirmação do pagamento.
 
 ## Estrutura
 
