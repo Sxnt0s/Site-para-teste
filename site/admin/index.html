@@ -175,12 +175,13 @@
                   </label>
                   <div class="admin-form-wide">
                     <span class="admin-panel-kicker">PAGAMENTOS</span>
-                    <p>Escolhe PayPal Checkout ou PayPal.me. As encomendas PayPal.me ficam pendentes até um administrador confirmar o recebimento.</p>
+                    <p>No Checkout, o pagamento é capturado automaticamente depois de o cliente o aprovar no PayPal. PayPal.me exige confirmação manual; sem PayPal, o cliente conclui o pedido por ticket no Discord.</p>
                   </div>
                   <label class="admin-form-wide">Método de pagamento
                     <select class="admin-role-select" name="paypalMethod">
-                      <option value="checkout">PayPal Checkout</option>
-                      <option value="paypal_me">PayPal.me</option>
+                      <option value="manual">Sem PayPal — ticket no Discord</option>
+                      <option value="checkout">PayPal Checkout — captura automática</option>
+                      <option value="paypal_me">PayPal.me — confirmação manual</option>
                     </select>
                   </label>
                   <label data-paypal-checkout-field>Ambiente PayPal
@@ -193,7 +194,7 @@
                   <label data-paypal-checkout-field>Client Secret<input name="paypalClientSecret" type="password" maxlength="512" autocomplete="new-password" placeholder="Introduz para atualizar o secret"></label>
                   <label class="admin-form-wide" data-paypal-me-field hidden>Link PayPal.me
                     <input name="paypalMeUrl" type="text" maxlength="500" autocomplete="url" placeholder="https://paypal.me/nomedaconta">
-                    <span class="admin-field-hint">O valor do pedido é acrescentado automaticamente. O pagamento é confirmado manualmente.</span>
+                    <span class="admin-field-hint">O valor do pedido é acrescentado automaticamente. O pagamento tem de ser confirmado manualmente.</span>
                   </label>
                 </div>
                 <div class="admin-form-footer">

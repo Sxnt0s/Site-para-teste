@@ -80,7 +80,12 @@ if (headerPlaceholder) {
       list.append(adminItem, mobileLogoutItem);
     }
     accountLink.href = session.user ? "/conta.html" : "/auth/discord";
-    accountLink.textContent = session.user ? "Área cliente" : "Entrar";
+    const displayName = session.user?.displayName?.trim();
+    accountLink.textContent = session.user ? `Conta: ${displayName || "Utilizador"}` : "Entrar";
+    accountLink.setAttribute(
+      "aria-label",
+      session.user ? `Abrir a conta de ${displayName || "Utilizador"}` : "Entrar com Discord"
+    );
     if (session.user && session.user.role === "customer") list.append(mobileLogoutItem);
   }).catch((error) => console.error("Não foi possível carregar os acessos da conta.", error));
 
@@ -253,6 +258,9 @@ if (headerPlaceholder) {
     menuButton.setAttribute("aria-label", isOpen ? "Fechar menu" : "Abrir menu");
     list.classList.toggle("is-open", isOpen);
     header.classList.toggle("mobile-menu-open", isOpen);
+  });
+  window.addEventListener("resize", () => {
+    if (window.matchMedia("(min-width: 1024px)").matches) closeMenu();
   });
   list.addEventListener("click", (event) => {
     if (event.target instanceof Element && event.target.closest("a, [data-open-cart]")) closeMenu();

@@ -9292,7 +9292,11 @@ html[dir="rtl"] {
       rgb(9 9 11 / 78%) 62%,
       rgb(9 9 11 / 38%) 100%
     ),
-    url("../assets/imgs/hero-graffiti-wall-cpx-v36.png") center 42% / cover;
+    var(
+        --hero-graffiti-image,
+        url("../assets/imgs/hero-graffiti-wall-cpx-v36.png?v=3")
+      )
+      center 42% / cover;
 }
 
 .store-hero {
@@ -10588,6 +10592,8 @@ html[dir="rtl"] {
 @media (max-width: 1023px) {
   .local-header.mobile-menu-open > .local-nav {
     width: min(100%, 440px);
+    max-height: none;
+    overflow: visible;
   }
 
   .local-header.mobile-menu-open > .local-nav > .local-nav-links.is-open {
@@ -10604,6 +10610,9 @@ html[dir="rtl"] {
     background: rgb(9 9 11 / 96%);
     padding: 10px;
     box-shadow: 0 10px 24px rgb(0 0 0 / 35%);
+    max-height: min(440px, max(120px, calc(100svh - 100px)));
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 

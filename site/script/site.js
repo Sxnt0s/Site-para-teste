@@ -43,6 +43,48 @@ revealVisibleElements();
 document.addEventListener("visibilitychange", revealVisibleElements);
 window.addEventListener("pageshow", revealVisibleElements);
 
+const heroGraffitiImage = document.querySelector("[data-hero-graffiti]");
+if (heroGraffitiImage || document.querySelector(".store-hero, .rules-hero")) {
+  const heroGraffitiUrl = new URL("../assets/imgs/hero-graffiti-wall-cpx-v36.png", document.baseURI);
+  if (["http:", "https:"].includes(window.location.protocol)) {
+    let currentVersion = "";
+    let checkingVersion = false;
+    let checkFailed = false;
+
+    async function refreshHeroGraffiti() {
+      if (checkingVersion || document.visibilityState === "hidden") return;
+      checkingVersion = true;
+      try {
+        const response = await fetch(heroGraffitiUrl, { method: "HEAD", cache: "no-store" });
+        if (!response.ok) throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
+        const version = response.headers.get("etag") || response.headers.get("last-modified");
+        if (!version) throw new Error("O servidor não enviou uma versão para a imagem.");
+
+        if (version !== currentVersion) {
+          currentVersion = version;
+          const currentImageUrl = new URL(heroGraffitiUrl);
+          currentImageUrl.searchParams.set("v", version);
+          const imageUrl = currentImageUrl.href;
+          document.documentElement.style.setProperty("--hero-graffiti-image", `url("${imageUrl}")`);
+          if (heroGraffitiImage) heroGraffitiImage.src = imageUrl;
+        }
+        checkFailed = false;
+      } catch (error) {
+        if (!checkFailed) console.error("Não foi possível verificar a imagem do hero graffiti.", error);
+        checkFailed = true;
+      } finally {
+        checkingVersion = false;
+      }
+    }
+
+    refreshHeroGraffiti();
+    window.setInterval(refreshHeroGraffiti, 5000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refreshHeroGraffiti();
+    });
+  }
+}
+
 document.querySelectorAll('[role="tablist"]').forEach((tabList) => {
   const tabs = [...tabList.querySelectorAll('[role="tab"]')];
 

@@ -640,7 +640,7 @@ brandingForm.addEventListener("submit", async (event) => {
       preview.src = settings[`${kind}Url`];
       preview.hidden = false;
     }
-    setAdminStatus("Identidade visual e configuração do PayPal atualizadas.");
+    setAdminStatus("Identidade visual e forma de pagamento guardadas.");
   } catch (error) {
     console.error("Não foi possível guardar a identidade visual.", error);
     setAdminStatus(error.message, "error");
@@ -650,11 +650,13 @@ brandingForm.addEventListener("submit", async (event) => {
 });
 
 function updatePaypalSettingsFields() {
-  const checkout = brandingForm.elements.namedItem("paypalMethod").value === "checkout";
+  const method = brandingForm.elements.namedItem("paypalMethod").value;
+  const checkout = method === "checkout";
+  const paypalMe = method === "paypal_me";
   document.querySelectorAll("[data-paypal-checkout-field]").forEach((field) => {
     field.hidden = !checkout;
   });
-  document.querySelector("[data-paypal-me-field]").hidden = checkout;
+  document.querySelector("[data-paypal-me-field]").hidden = !paypalMe;
 }
 
 brandingForm.elements.namedItem("paypalMethod").addEventListener("change", updatePaypalSettingsFields);
